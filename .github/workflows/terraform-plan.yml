@@ -3,6 +3,8 @@ name: Terraform Plan
 on:
   pull_request:
     branches: [ master ]
+  push:
+    branches: [ master ]
 
 env:
   TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
