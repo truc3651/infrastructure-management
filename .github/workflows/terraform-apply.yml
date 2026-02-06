@@ -1,0 +1,112 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches: [ master ]
+  
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      component:
+        description: 'Component to deploy (or "all")'
+        required: true
+        default: 'all'
+
+env:
+  TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+jobs:
+  determine-deployments:
+    runs-on: ubuntu-latest
+    outputs:
+      deployments: ${{ steps.set-deployments.outputs.deployments }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Determine what to deploy
+        id: set-deployments
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            COMPONENT="${{ github.event.inputs.component }}"
+            
+            if [ "$COMPONENT" == "all" ]; then
+              DEPLOYMENTS=$(echo '[
+                {"env": "'$ENV'", "component": "vpc"},
+                {"env": "'$ENV'", "component": "eks"},
+                {"env": "'$ENV'", "component": "ecr"}
+              ]' | jq -c)
+            else
+              DEPLOYMENTS='[{"env": "'$ENV'", "component": "'$COMPONENT'"}]'
+            fi
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- environments/)
+            
+            DEPLOYMENTS=$(echo "$CHANGED_FILES" | \
+              grep -oP 'environments/\K([^/]+)/([^/]+)' | \
+              awk -F'/' '{print "{\"env\": \""$1"\", \"component\": \""$2"\"}"}' | \
+              jq -s -c 'unique')
+          fi
+          
+          echo "deployments=$DEPLOYMENTS" >> $GITHUB_OUTPUT
+          echo "Will deploy: $DEPLOYMENTS"
+
+  apply:
+    needs: determine-deployments
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        deployment: ${{ fromJson(needs.determine-deployments.outputs.deployments) }}
+      max-parallel: 1  # Deploy one at a time to respect dependencies
+    
+    environment:
+      name: ${{ matrix.deployment.env }}
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Terragrunt Setup
+        uses: ./.github/actions/terragrunt-setup
+        with:
+          terraform-version: ${{ env.TERRAFORM_VERSION }}
+          terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
+          aws-region: ${{ env.AWS_REGION }}
+          aws-role: ${{ env.AWS_ROLE_TO_ASSUME }}
+      
+      - name: Terragrunt Init
+        working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}
+        run: terragrunt init
+      
+      - name: Terragrunt Apply
+        uses: ./.github/actions/terragrunt-apply
+        with:
+          working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}
+      
+      - name: Notify on Failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '❌ Terraform Apply Failed: ${{ matrix.deployment.env }}/${{ matrix.deployment.component }}',
+              body: 'Terraform apply failed for ${{ matrix.deployment.env }}/${{ matrix.deployment.component }}\n\nWorkflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+              labels: ['infrastructure', 'terraform', 'failure']
+            });

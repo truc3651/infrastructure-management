@@ -1,0 +1,26 @@
+name: 'Terragrunt Plan'
+description: 'Run terragrunt init, validate, and plan'
+
+inputs:
+  working-directory:
+    description: 'Working directory'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Terragrunt Init
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: terragrunt init
+    
+    - name: Terragrunt Validate
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: terragrunt validate
+    
+    - name: Terragrunt Plan
+      id: plan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: terragrunt plan

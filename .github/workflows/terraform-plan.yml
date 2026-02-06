@@ -1,0 +1,66 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [ master ]
+
+env:
+  TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
+  TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      components: ${{ steps.changes.outputs.components }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Downloads ENTIRE git history
+      
+      - name: Detect changed components
+        id: changes
+        run: |
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only origin/master HEAD -- environments/)
+          
+          # Extract unique environment/component combinations
+          COMPONENTS=$(echo "$CHANGED_FILES" | \
+            grep -oP 'environments/\K[^/]+/[^/]+' | \
+            sort -u | \
+            jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
+          
+          echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
+          echo "Changed components: $COMPONENTS"
+
+  plan:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    # Run job per changed component in parallel
+    strategy:
+      matrix:
+        component: ${{ fromJson(needs.detect-changes.outputs.components) }}
+      fail-fast: false
+    
+    permissions:
+      contents: read
+      pull-requests: write # comment on PR
+      id-token: write  # request temporary AWS credentials via OIDC
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Terragrunt Setup
+        uses: ./.github/actions/setup-terragrunt
+        with:
+          terraform-version: ${{ env.TERRAFORM_VERSION }}
+          terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
+          aws-region: ${{ env.AWS_REGION }}
+          aws-role: ${{ env.AWS_ROLE_TO_ASSUME }}
+      
+      - name: Terragrunt Plan
+        uses: ./.github/actions/terragrunt-plan
+        with:
+          working-directory: environments/${{ matrix.component }}
