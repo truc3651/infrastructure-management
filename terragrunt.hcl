@@ -5,6 +5,8 @@ locals {
   
   environment = local.parsed.env
   component   = local.parsed.component
+
+   is_bootstrap = local.component == "s3-backend"
   
   # Common variables
   env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
@@ -46,6 +48,8 @@ EOF
 
 remote_state {
   backend = "s3"
+
+  disable_init = local.is_bootstrap
   
   generate = {
     path      = "backend.tf"
