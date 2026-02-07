@@ -1,7 +1,7 @@
 locals {
   # Parse the file path to extract environment name
   # Path will be like: environments/dev/vpc/terragrunt.hcl
-  parsed = regex(".*/environments/(?P<env>[^/]+)/(?P<component>[^/]+)/.*", get_terragrunt_dir())
+  parsed = regex(".*environments/(?P<env>[^/]+)/(?P<component>[^/]+)$", get_terragrunt_dir())
   
   environment = local.parsed.env
   component   = local.parsed.component

@@ -3,6 +3,8 @@ name: Terraform Plan
 on:
   pull_request:
     branches: [ master ]
+  push:
+    branches: [ master ]
 
 env:
   TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
@@ -37,6 +39,7 @@ jobs:
 
   plan:
     needs: detect-changes
+    if: needs.detect-changes.outputs.components != '[]'
     runs-on: ubuntu-latest
     # Run job per changed component in parallel
     strategy:
@@ -53,7 +56,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Terragrunt Setup
-        uses: ./.github/actions/setup-terragrunt
+        uses: ./.github/actions/terragrunt-setup
         with:
           terraform-version: ${{ env.TERRAFORM_VERSION }}
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}

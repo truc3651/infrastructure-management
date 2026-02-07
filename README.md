@@ -1,1 +1,4 @@
-This project manage infrastructure using Terraform which follows GitOps principles
+This project manage AWS infra by using Terraform and Terragrunt which follows GitOps principles
+
+Manual resources
+- OIDC provider token.actions.githubusercontent.com

@@ -94,19 +94,5 @@ jobs:
         run: terragrunt init
       
       - name: Terragrunt Apply
-        uses: ./.github/actions/terragrunt-apply
-        with:
-          working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}
-      
-      - name: Notify on Failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: '❌ Terraform Apply Failed: ${{ matrix.deployment.env }}/${{ matrix.deployment.component }}',
-              body: 'Terraform apply failed for ${{ matrix.deployment.env }}/${{ matrix.deployment.component }}\n\nWorkflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
-              labels: ['infrastructure', 'terraform', 'failure']
-            });
+        working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}
+        run: terragrunt apply -auto-approve
