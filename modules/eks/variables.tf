@@ -1,27 +1,27 @@
 variable "cluster_name" {
-  type        = string
+  type = string
 }
 
 variable "vpc_id" {
-  type        = string
+  type = string
 }
 
 variable "private_subnet_ids" {
-  type        = list(string)
+  type = list(string)
 }
 
 variable "environment" {
-  type        = string
+  type = string
 }
 
 variable "min_nodes" {
-  type        = number
+  type = number
 }
 
 variable "desired_nodes" {
-  type        = number
+  type = number
 }
 
 variable "max_nodes" {
-  type        = number
+  type = number
 }

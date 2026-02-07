@@ -13,12 +13,12 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: terragrunt init
-    
+
     - name: Terragrunt Validate
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: terragrunt validate
-    
+
     - name: Terragrunt Plan
       id: plan
       shell: bash

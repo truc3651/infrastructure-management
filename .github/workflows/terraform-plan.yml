@@ -10,7 +10,7 @@ env:
   TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
   TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
   AWS_REGION: ${{ vars.AWS_REGION }}
-  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
 
 jobs:
   detect-changes:
@@ -21,19 +21,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Downloads ENTIRE git history
-      
+
       - name: Detect changed components
         id: changes
         run: |
           # Get list of changed files
           CHANGED_FILES=$(git diff --name-only origin/master HEAD -- environments/)
-          
+
           # Extract unique environment/component combinations
           COMPONENTS=$(echo "$CHANGED_FILES" | \
             grep -oP 'environments/\K[^/]+/[^/]+' | \
             sort -u | \
             jq -R -s -c 'split("\n")[:-1] | map(select(length > 0))')
-          
+
           echo "components=$COMPONENTS" >> $GITHUB_OUTPUT
           echo "Changed components: $COMPONENTS"
 
@@ -46,23 +46,23 @@ jobs:
       matrix:
         component: ${{ fromJson(needs.detect-changes.outputs.components) }}
       fail-fast: false
-    
+
     permissions:
       contents: read
       pull-requests: write # comment on PR
       id-token: write  # request temporary AWS credentials via OIDC
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Terragrunt Setup
         uses: ./.github/actions/terragrunt-setup
         with:
           terraform-version: ${{ env.TERRAFORM_VERSION }}
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
           aws-region: ${{ env.AWS_REGION }}
-          aws-role: ${{ env.AWS_ROLE_TO_ASSUME }}
-      
+          aws-role: ${{ env.AWS_ROLE_ARN }}
+
       - name: Terragrunt Plan
         uses: ./.github/actions/terragrunt-plan
         with:

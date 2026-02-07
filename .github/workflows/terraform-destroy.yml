@@ -18,30 +18,30 @@ env:
   TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
   TERRAFORM_VERSION: ${{ vars.TERRAFORM_VERSION }}
   AWS_REGION: ${{ vars.AWS_REGION }}
-  AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
 
 jobs:
   destroy:
     runs-on: ubuntu-latest
-    
+
     environment:
       name: ${{ github.event.inputs.environment }}-destroy
-    
+
     permissions:
       contents: read
       id-token: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Terragrunt Setup
         uses: ./.github/actions/terragrunt-setup
         with:
           terraform-version: ${{ env.TERRAFORM_VERSION }}
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
           aws-region: ${{ env.AWS_REGION }}
-          aws-role: ${{ env.AWS_ROLE_TO_ASSUME }}
-      
+          aws-role: ${{ env.AWS_ROLE_ARN }}
+
       - name: Terragrunt Destroy
         working-directory: environments/${{ github.event.inputs.environment }}
         run: |

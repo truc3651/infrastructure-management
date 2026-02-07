@@ -13,7 +13,7 @@ terraform {
 
 dependency "vpc" {
   config_path = "../vpc"
-  
+
   # Mock outputs for plan/validate without applying VPC first
   mock_outputs = {
     vpc_id                 = "vpc-mock"
@@ -25,7 +25,7 @@ dependency "vpc" {
 inputs = {
   vpc_id             = dependency.vpc.outputs.vpc_id
   private_subnet_ids = dependency.vpc.outputs.private_subnet_ids_list
-  
+
   min_nodes     = include.env.locals.min_nodes
   desired_nodes = include.env.locals.desired_nodes
   max_nodes     = include.env.locals.max_nodes
