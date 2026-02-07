@@ -44,7 +44,6 @@ jobs:
             
             if [ "$COMPONENT" == "all" ]; then
               DEPLOYMENTS=$(echo '[
-                {"env": "'$ENV'", "component": "s3-backend"},
                 {"env": "'$ENV'", "component": "vpc"},
                 {"env": "'$ENV'", "component": "eks"},
                 {"env": "'$ENV'", "component": "ecr"}
