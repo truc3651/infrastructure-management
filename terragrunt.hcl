@@ -53,7 +53,7 @@ remote_state {
   }
   
   config = {
-    bucket         = "terraform-remotes"
+    bucket         = "truc2001-terraform-remotes"
     key            = "${local.environment}/${local.component}/terraform.tfstate"
     region         = "${local.aws_region}"
     encrypt        = true
