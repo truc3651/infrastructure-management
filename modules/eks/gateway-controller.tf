@@ -295,28 +295,30 @@ resource "helm_release" "aws_load_balancer_controller" {
   namespace  = kubernetes_namespace.gateway.metadata[0].name
   version    = "1.7.1"
 
-  set = [
-    {
-      name  = "clusterName"
-      value = var.cluster_name
-    },
-    {
-      name  = "serviceAccount.create"
-      value = "true"
-    },
-    {
-      name  = "serviceAccount.name"
-      value = "aws-load-balancer-controller"
-    },
-    {
-      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-      value = aws_iam_role.aws_load_balancer_controller.arn
-    },
-    {
-      name  = "enableGatewayAPI"
-      value = "true"
-    }
-  ]
+  set {
+    name  = "clusterName"
+    value = var.cluster_name
+  }
+  
+  set {
+    name  = "serviceAccount.create"
+    value = "true"
+  }
+  
+  set {
+    name  = "serviceAccount.name"
+    value = "aws-load-balancer-controller"
+  }
+  
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.aws_load_balancer_controller.arn
+  }
+  
+  set {
+    name  = "enableGatewayAPI"
+    value = "true"
+  }
 
   depends_on = [
     kubernetes_namespace.gateway,
