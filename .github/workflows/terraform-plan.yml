@@ -26,7 +26,11 @@ jobs:
         id: changes
         run: |
           # Get list of changed files
-          CHANGED_FILES=$(git diff --name-only origin/master HEAD -- environments/)
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- environments/)
+          else
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- environments/)
+          fi
 
           # Extract unique environment/component combinations
           COMPONENTS=$(echo "$CHANGED_FILES" | \

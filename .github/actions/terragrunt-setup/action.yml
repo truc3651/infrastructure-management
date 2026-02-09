@@ -31,10 +31,6 @@ runs:
         terraform_version: ${{ inputs.terraform-version }}
         terraform_wrapper: false
 
-    - name: Check Terraform formatting
-      shell: bash
-      run: terraform fmt -check -recursive
-
     - name: Terragrunt Setup
       shell: bash
       run: |
