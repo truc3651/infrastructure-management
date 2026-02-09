@@ -10,9 +10,11 @@ on:
         options:
           - dev
           - staging
+          - prod
       component:
         description: 'Component to destroy (or "all" for everything)'
-        required: true
+        required: false
+        default: 'all'
 
 env:
   TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
