@@ -176,6 +176,11 @@ attach-policies:
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
 		--role-name GitHubActionsRole \
+		--policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess \
+		2>/dev/null && echo "✓ EC2 policy attached" || echo "✓ EC2 policy already attached"
+	@aws iam attach-role-policy \
+		--profile $(AWS_PROFILE) \
+		--role-name GitHubActionsRole \
 		--policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy \
 		2>/dev/null && echo "✓ EKS policy attached" || echo "✓ EKS policy already attached"
 	@aws iam attach-role-policy \
