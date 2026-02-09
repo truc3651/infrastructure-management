@@ -116,7 +116,7 @@ module "eks" {
       desired_size = var.desired_nodes
 
       instance_types = ["t3a.medium"]
-      capacity_type  = "ON_DEMAND" # SPOT is cheaper but can be interrupted
+      capacity_type  = "ON_DEMAND"
 
       labels = {
         Environment = var.environment

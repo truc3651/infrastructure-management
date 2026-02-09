@@ -14,6 +14,15 @@ variable "environment" {
   type = string
 }
 
+variable "gateway_namespace" {
+  type    = string
+  default = "gateway-system"
+}
+
+variable "public_subnet_ids" {
+  type = list(string)
+}
+
 variable "min_nodes" {
   type = number
 }
