@@ -286,6 +286,8 @@ resource "kubernetes_namespace" "gateway" {
       managed-by = "terraform"
     }
   }
+
+  depends_on = [module.eks]
 }
 
 resource "helm_release" "aws_load_balancer_controller" {

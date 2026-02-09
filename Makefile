@@ -4,8 +4,9 @@ BUCKET_NAME ?= truc2001-terraform-remotes
 TABLE_NAME ?= terraform-locks
 AWS_REGION ?= ap-southeast-1
 AWS_PROFILE ?= personal
+ROLE_NAME ?= GitHubActionsRole
 
-.PHONY: help bootstrap create-bucket create-dynamodb destroy-backend create-oidc-provider create-iam-role attach-policies get-role-arn
+.PHONY: help bootstrap create-bucket create-dynamodb destroy-backend create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn
 
 help:
 	@echo "Terraform Backend Bootstrap"
@@ -17,7 +18,8 @@ help:
 	@echo "  make destroy-backend  		- Delete S3 bucket and DynamoDB table"
 	@echo "  make create-oidc-provider 	- Create GitHub OIDC provider"
 	@echo "  make create-iam-role      	- Create IAM role for GitHub Actions"
-	@echo "  make attach-policies      	- Attach policies to IAM role"
+	@echo "  make attach-policies      	- Attach AWS managed policies to IAM role"
+	@echo "  make attach-custom-policies  	- Create and attach custom policies to IAM role"
 	@echo "  make get-role-arn         	- Get IAM role ARN"
 	@echo ""
 	@echo "Variables:"
@@ -25,8 +27,9 @@ help:
 	@echo "  TABLE_NAME   				- DynamoDB table name (default: terraform-locks)"
 	@echo "  AWS_REGION   				- AWS region (default: ap-southeast-1)"
 	@echo "  AWS_PROFILE  				- AWS profile (default: personal)"
+	@echo "  ROLE_NAME    				- IAM role name (default: GitHubActionsRole)"
 
-bootstrap: create-bucket create-dynamodb create-oidc-provider create-iam-role attach-policies get-role-arn
+bootstrap: create-bucket create-dynamodb create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn
 
 create-bucket:
 	@echo "Creating S3 bucket: $(BUCKET_NAME)"
@@ -139,7 +142,7 @@ create-iam-role:
 	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
 	aws iam create-role \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--assume-role-policy-document '{ \
 			"Version": "2012-10-17", \
 			"Statement": [ \
@@ -162,41 +165,214 @@ create-iam-role:
 		}' 2>/dev/null && echo "✓ IAM role created" || echo "✓ IAM role already exists";
 
 attach-policies:
-	@echo "Attaching policies to GitHubActionsRole..."
+	@echo "Attaching AWS managed policies..."
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess \
 		2>/dev/null && echo "✓ DynamoDB policy attached" || echo "✓ DynamoDB policy already attached"
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess \
 		2>/dev/null && echo "✓ ECR policy attached" || echo "✓ ECR policy already attached"
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--policy-arn arn:aws:iam::aws:policy/AmazonEC2FullAccess \
 		2>/dev/null && echo "✓ EC2 policy attached" || echo "✓ EC2 policy already attached"
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy \
-		2>/dev/null && echo "✓ EKS policy attached" || echo "✓ EKS policy already attached"
+		2>/dev/null && echo "✓ EKS Cluster policy attached" || echo "✓ EKS Cluster policy already attached"
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess \
 		2>/dev/null && echo "✓ S3 policy attached" || echo "✓ S3 policy already attached"
 	@aws iam attach-role-policy \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--policy-arn arn:aws:iam::aws:policy/AmazonVPCFullAccess \
 		2>/dev/null && echo "✓ VPC policy attached" || echo "✓ VPC policy already attached"
-	@echo "✓ All policies configured"
+	@echo "✓ AWS managed policies attached"
+
+attach-custom-policies:
+	@echo "Creating and attaching custom IAM policies..."
+	
+	@echo "Creating IAM Full Access policy..."
+	@aws iam create-policy \
+		--profile $(AWS_PROFILE) \
+		--policy-name GitHubActions-IAM-FullAccess \
+		--policy-document '{ \
+			"Version": "2012-10-17", \
+			"Statement": [ \
+				{ \
+					"Effect": "Allow", \
+					"Action": [ \
+						"iam:CreateRole", \
+						"iam:DeleteRole", \
+						"iam:GetRole", \
+						"iam:UpdateRole", \
+						"iam:ListRoles", \
+						"iam:TagRole", \
+						"iam:UntagRole", \
+						"iam:CreatePolicy", \
+						"iam:DeletePolicy", \
+						"iam:GetPolicy", \
+						"iam:GetPolicyVersion", \
+						"iam:ListPolicies", \
+						"iam:ListPolicyVersions", \
+						"iam:CreatePolicyVersion", \
+						"iam:DeletePolicyVersion", \
+						"iam:AttachRolePolicy", \
+						"iam:DetachRolePolicy", \
+						"iam:ListAttachedRolePolicies", \
+						"iam:ListRolePolicies", \
+						"iam:PutRolePolicy", \
+						"iam:GetRolePolicy", \
+						"iam:DeleteRolePolicy", \
+						"iam:CreateInstanceProfile", \
+						"iam:DeleteInstanceProfile", \
+						"iam:GetInstanceProfile", \
+						"iam:AddRoleToInstanceProfile", \
+						"iam:RemoveRoleFromInstanceProfile", \
+						"iam:ListInstanceProfiles", \
+						"iam:ListInstanceProfilesForRole", \
+						"iam:PassRole", \
+						"iam:CreateServiceLinkedRole", \
+						"iam:DeleteServiceLinkedRole", \
+						"iam:GetServiceLinkedRoleDeletionStatus", \
+						"iam:CreateOpenIDConnectProvider", \
+						"iam:DeleteOpenIDConnectProvider", \
+						"iam:GetOpenIDConnectProvider", \
+						"iam:ListOpenIDConnectProviders", \
+						"iam:TagOpenIDConnectProvider", \
+						"iam:UntagOpenIDConnectProvider", \
+						"iam:UpdateOpenIDConnectProviderThumbprint" \
+					], \
+					"Resource": "*" \
+				} \
+			] \
+		}' 2>/dev/null && echo "✓ IAM policy created" || echo "✓ IAM policy already exists"
+	
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
+	aws iam attach-role-policy \
+		--profile $(AWS_PROFILE) \
+		--role-name $(ROLE_NAME) \
+		--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/GitHubActions-IAM-FullAccess \
+		2>/dev/null && echo "✓ IAM policy attached" || echo "✓ IAM policy already attached"
+	
+	@echo "Creating KMS policy..."
+	@aws iam create-policy \
+		--profile $(AWS_PROFILE) \
+		--policy-name GitHubActions-KMS-FullAccess \
+		--policy-document '{ \
+			"Version": "2012-10-17", \
+			"Statement": [ \
+				{ \
+					"Effect": "Allow", \
+					"Action": [ \
+						"kms:CreateKey", \
+						"kms:CreateAlias", \
+						"kms:DeleteAlias", \
+						"kms:DescribeKey", \
+						"kms:GetKeyPolicy", \
+						"kms:GetKeyRotationStatus", \
+						"kms:ListAliases", \
+						"kms:ListKeys", \
+						"kms:ListResourceTags", \
+						"kms:PutKeyPolicy", \
+						"kms:ScheduleKeyDeletion", \
+						"kms:CancelKeyDeletion", \
+						"kms:EnableKeyRotation", \
+						"kms:DisableKeyRotation", \
+						"kms:TagResource", \
+						"kms:UntagResource", \
+						"kms:UpdateAlias", \
+						"kms:UpdateKeyDescription", \
+						"kms:Encrypt", \
+						"kms:Decrypt", \
+						"kms:GenerateDataKey" \
+					], \
+					"Resource": "*" \
+				} \
+			] \
+		}' 2>/dev/null && echo "✓ KMS policy created" || echo "✓ KMS policy already exists"
+	
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
+	aws iam attach-role-policy \
+		--profile $(AWS_PROFILE) \
+		--role-name $(ROLE_NAME) \
+		--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/GitHubActions-KMS-FullAccess \
+		2>/dev/null && echo "✓ KMS policy attached" || echo "✓ KMS policy already attached"
+	
+	@echo "Creating CloudWatch Logs policy..."
+	@aws iam create-policy \
+		--profile $(AWS_PROFILE) \
+		--policy-name GitHubActions-CloudWatch-FullAccess \
+		--policy-document '{ \
+			"Version": "2012-10-17", \
+			"Statement": [ \
+				{ \
+					"Effect": "Allow", \
+					"Action": [ \
+						"logs:CreateLogGroup", \
+						"logs:DeleteLogGroup", \
+						"logs:DescribeLogGroups", \
+						"logs:ListTagsLogGroup", \
+						"logs:PutRetentionPolicy", \
+						"logs:DeleteRetentionPolicy", \
+						"logs:TagLogGroup", \
+						"logs:UntagLogGroup", \
+						"logs:CreateLogStream", \
+						"logs:DeleteLogStream", \
+						"logs:DescribeLogStreams", \
+						"logs:PutLogEvents" \
+					], \
+					"Resource": "*" \
+				} \
+			] \
+		}' 2>/dev/null && echo "✓ CloudWatch policy created" || echo "✓ CloudWatch policy already exists"
+	
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
+	aws iam attach-role-policy \
+		--profile $(AWS_PROFILE) \
+		--role-name $(ROLE_NAME) \
+		--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/GitHubActions-CloudWatch-FullAccess \
+		2>/dev/null && echo "✓ CloudWatch policy attached" || echo "✓ CloudWatch policy already attached"
+	
+	@echo "Creating EKS Extended policy..."
+	@aws iam create-policy \
+		--profile $(AWS_PROFILE) \
+		--policy-name GitHubActions-EKS-Extended \
+		--policy-document '{ \
+			"Version": "2012-10-17", \
+			"Statement": [ \
+				{ \
+					"Effect": "Allow", \
+					"Action": [ \
+						"eks:*", \
+						"autoscaling:*", \
+						"elasticloadbalancing:*" \
+					], \
+					"Resource": "*" \
+				} \
+			] \
+		}' 2>/dev/null && echo "✓ EKS Extended policy created" || echo "✓ EKS Extended policy already exists"
+	
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
+	aws iam attach-role-policy \
+		--profile $(AWS_PROFILE) \
+		--role-name $(ROLE_NAME) \
+		--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/GitHubActions-EKS-Extended \
+		2>/dev/null && echo "✓ EKS Extended policy attached" || echo "✓ EKS Extended policy already attached"
+	
+	@echo "✓ All custom policies attached"
 
 get-role-arn:
-	@ROLE_ARN=$$(aws iam get-role --profile $(AWS_PROFILE) --role-name GitHubActionsRole --query 'Role.Arn' --output text 2>/dev/null); \
+	@ROLE_ARN=$$(aws iam get-role --profile $(AWS_PROFILE) --role-name $(ROLE_NAME) --query 'Role.Arn' --output text 2>/dev/null); \
 	if [ -n "$$ROLE_ARN" ]; then \
 		echo ""; \
 		echo "========================================"; \
@@ -209,7 +385,7 @@ get-role-arn:
 		echo "========================================"; \
 		echo ""; \
 	else \
-		echo "❌ Role 'GitHubActionsRole' not found."; \
+		echo "❌ Role '$(ROLE_NAME)' not found."; \
 		echo "Run 'make create-iam-role' first."; \
 	fi
 
@@ -217,21 +393,39 @@ destroy-backend:
 	@echo "WARNING: This will delete all Terraform state!"
 	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
 
-	@echo "Deleting IAM role policies..."
+	@echo "Detaching custom policies..."
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
+	for policy in GitHubActions-IAM-FullAccess GitHubActions-KMS-FullAccess GitHubActions-CloudWatch-FullAccess GitHubActions-EKS-Extended; do \
+		aws iam detach-role-policy \
+			--profile $(AWS_PROFILE) \
+			--role-name $(ROLE_NAME) \
+			--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/$$policy 2>/dev/null || true; \
+	done
+
+	@echo "Detaching AWS managed policies..."
 	@aws iam list-attached-role-policies \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole \
+		--role-name $(ROLE_NAME) \
 		--query 'AttachedPolicies[].PolicyArn' \
 		--output text 2>/dev/null | \
 		xargs -n1 -I {} aws iam detach-role-policy \
 			--profile $(AWS_PROFILE) \
-			--role-name GitHubActionsRole \
+			--role-name $(ROLE_NAME) \
 			--policy-arn {} 2>/dev/null || true
+
+	@echo "Deleting custom policies..."
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
+	for policy in GitHubActions-IAM-FullAccess GitHubActions-KMS-FullAccess GitHubActions-CloudWatch-FullAccess GitHubActions-EKS-Extended; do \
+		aws iam delete-policy \
+			--profile $(AWS_PROFILE) \
+			--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/$$policy 2>/dev/null \
+			&& echo "✓ $$policy deleted" || true; \
+	done
 
 	@echo "Deleting IAM role..."
 	@aws iam delete-role \
 		--profile $(AWS_PROFILE) \
-		--role-name GitHubActionsRole 2>/dev/null \
+		--role-name $(ROLE_NAME) 2>/dev/null \
 		&& echo "✓ IAM role deleted" || echo "✓ IAM role not found"
 
 	@echo "Deleting OIDC provider..."
