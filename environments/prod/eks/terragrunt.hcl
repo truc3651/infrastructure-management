@@ -12,7 +12,7 @@ terraform {
 }
 
 generate "k8s_providers" {
-  path      = "k8s-providers.tf"
+  path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
 terraform {
