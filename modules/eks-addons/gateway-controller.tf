@@ -262,12 +262,12 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
       Action = "sts:AssumeRoleWithWebIdentity"
       Effect = "Allow"
       Principal = {
-        Federated = module.eks.oidc_provider_arn
+        Federated = var.oidc_provider_arn
       }
       Condition = {
         StringEquals = {
-          "${replace(module.eks.oidc_provider, "https://", "")}:sub" = "system:serviceaccount:${var.gateway_namespace}:aws-load-balancer-controller"
-          "${replace(module.eks.oidc_provider, "https://", "")}:aud" = "sts.amazonaws.com"
+          "${replace(var.oidc_provider, "https://", "")}:sub" = "system:serviceaccount:${var.gateway_namespace}:aws-load-balancer-controller"
+          "${replace(var.oidc_provider, "https://", "")}:aud" = "sts.amazonaws.com"
         }
       }
     }]
@@ -286,8 +286,6 @@ resource "kubernetes_namespace" "gateway" {
       managed-by = "terraform"
     }
   }
-
-  depends_on = [module.eks]
 }
 
 resource "helm_release" "aws_load_balancer_controller" {

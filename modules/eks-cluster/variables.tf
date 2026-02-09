@@ -18,11 +18,6 @@ variable "environment" {
   type = string
 }
 
-variable "gateway_namespace" {
-  type    = string
-  default = "gateway-system"
-}
-
 variable "min_nodes" {
   type = number
 }

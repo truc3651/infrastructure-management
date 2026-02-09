@@ -45,7 +45,8 @@ jobs:
             if [ "$COMPONENT" == "all" ]; then
               DEPLOYMENTS=$(echo '[
                 {"env": "'$ENV'", "component": "vpc"},
-                {"env": "'$ENV'", "component": "eks"},
+                {"env": "'$ENV'", "component": "eks-cluster"},
+                {"env": "'$ENV'", "component": "eks-addons"},
                 {"env": "'$ENV'", "component": "ecr"}
               ]' | jq -c)
             else

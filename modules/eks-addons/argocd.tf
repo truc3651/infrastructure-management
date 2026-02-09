@@ -5,7 +5,6 @@ resource "kubernetes_namespace" "argocd" {
       managed-by = "terraform"
     }
   }
-  depends_on = [module.eks]
 }
 
 resource "helm_release" "argocd" {
@@ -29,7 +28,6 @@ resource "helm_release" "argocd" {
         }
       }
 
-
       configs = {
         cm = {
           # It tells: which Kubernetes resources belong to which applications
@@ -50,7 +48,6 @@ resource "helm_release" "argocd" {
   ]
 
   depends_on = [
-    module.eks,
     kubernetes_namespace.argocd
   ]
 
@@ -66,8 +63,6 @@ resource "kubernetes_namespace" "application" {
       managed-by  = "terraform"
     }
   }
-
-  depends_on = [module.eks]
 }
 
 data "kubernetes_secret" "argocd_initial_admin_secret" {

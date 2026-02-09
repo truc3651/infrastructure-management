@@ -1,4 +1,5 @@
 locals {
+  environment  = "prod"
   aws_region   = "ap-southeast-1"
   cluster_name = "backend"
 
