@@ -6,6 +6,10 @@ variable "vpc_id" {
   type = string
 }
 
+variable "public_subnet_ids" {
+  type = list(string)
+}
+
 variable "private_subnet_ids" {
   type = list(string)
 }
@@ -17,10 +21,6 @@ variable "environment" {
 variable "gateway_namespace" {
   type    = string
   default = "gateway-system"
-}
-
-variable "public_subnet_ids" {
-  type = list(string)
 }
 
 variable "min_nodes" {
