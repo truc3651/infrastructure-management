@@ -7,7 +7,7 @@ resource "aws_kms_key" "eks_secrets" {
 }
 
 resource "aws_kms_alias" "eks_secrets" {
-  name          = "alias/${var.cluster_name}-eks-secrets"
+  name          = "alias/${var.cluster_name}-eks-cluster-secrets"
   target_key_id = aws_kms_key.eks_secrets.key_id
 }
 
@@ -98,7 +98,7 @@ module "eks" {
 
   # Use a minimal node group for cost optimization
   eks_managed_node_group_defaults = {
-    ami_type       = "AL2_x86_64"
+    ami_type       = "AL2023_x86_64_STANDARD"
     instance_types = ["t3a.medium"] # 2 vCPU, 4GB RAM
 
     disk_size = 20
