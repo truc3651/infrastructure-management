@@ -6,6 +6,22 @@ resource "aws_eip" "nlb" {
   }
 }
 
+# Install Gateway API CRDs - required before creating GatewayClass/Gateway resources
+data "http" "gateway_api_crds" {
+  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml"
+}
+
+data "kubectl_file_documents" "gateway_api_crds" {
+  content = data.http.gateway_api_crds.response_body
+}
+
+resource "kubectl_manifest" "gateway_api_crds" {
+  for_each  = data.kubectl_file_documents.gateway_api_crds.manifests
+  yaml_body = each.value
+
+  depends_on = [helm_release.aws_load_balancer_controller]
+}
+
 resource "kubectl_manifest" "gateway_class" {
   yaml_body = yamlencode({
     apiVersion = "gateway.networking.k8s.io/v1"
@@ -18,7 +34,10 @@ resource "kubectl_manifest" "gateway_class" {
       controllerName = "gateway.networking.k8s.io/aws-gateway-controller"
     }
   })
-  depends_on = [helm_release.aws_load_balancer_controller]
+  depends_on = [
+    helm_release.aws_load_balancer_controller,
+    kubectl_manifest.gateway_api_crds
+  ]
 }
 
 resource "kubectl_manifest" "main_gateway" {
