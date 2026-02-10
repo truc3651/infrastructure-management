@@ -129,4 +129,30 @@ module "eks" {
   cluster_endpoint_public_access = true
   # access within VPC
   cluster_endpoint_private_access = true
+
+  # Disable automatic access entry creation
+  enable_cluster_creator_admin_permissions = false
+  
+  # Don't let the module create access entries automatically
+  authentication_mode = "API_AND_CONFIG_MAP"
+}
+
+# Manually create access entry for GitHub Actions role
+resource "aws_eks_access_entry" "github_actions" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = data.aws_iam_role.github_actions.arn
+  type          = "STANDARD"
+
+  depends_on = [module.eks]
+}
+resource "aws_eks_access_policy_association" "github_actions_admin" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = data.aws_iam_role.github_actions.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_actions]
 }
