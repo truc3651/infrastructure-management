@@ -1,4 +1,4 @@
-resource "aws_kms_key" "eks_secrets" {
+resource "aws_kms_key" "eks_cluster_secrets" {
   description              = "KMS key for EKS cluster ${var.cluster_name} secrets encryption"
   deletion_window_in_days  = 7
   enable_key_rotation      = true
@@ -6,9 +6,9 @@ resource "aws_kms_key" "eks_secrets" {
   customer_master_key_spec = "SYMMETRIC_DEFAULT"
 }
 
-resource "aws_kms_alias" "eks_secrets" {
-  name          = "alias/${var.cluster_name}-eks-cluster-secrets"
-  target_key_id = aws_kms_key.eks_secrets.key_id
+resource "aws_kms_alias" "eks_cluster_secrets" {
+  name          = "alias/${var.cluster_name}-eks-cluster-secrets-abc"
+  target_key_id = aws_kms_key.eks_cluster_secrets.key_id
 }
 
 resource "aws_security_group" "cluster" {
@@ -92,7 +92,7 @@ module "eks" {
 
   # Enable secrets encryption with KMS
   cluster_encryption_config = {
-    provider_key_arn = aws_kms_key.eks_secrets.arn
+    provider_key_arn = aws_kms_key.eks_cluster_secrets.arn
     resources        = ["secrets"]
   }
 
