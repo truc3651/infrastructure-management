@@ -21,7 +21,7 @@ locals {
 
 generate "provider" {
   path      = "provider.tf"
-  if_exists = local.component == "eks-addons" ? "overwrite_terragrunt" : "skip"
+  if_exists = local.component == "eks-addons" ? "skip" : "overwrite_terragrunt"
   contents  = <<EOF
 terraform {
   required_version = ">= 1.5"
