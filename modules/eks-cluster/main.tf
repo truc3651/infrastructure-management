@@ -156,3 +156,23 @@ resource "aws_eks_access_policy_association" "github_actions_admin" {
 
   depends_on = [aws_eks_access_entry.github_actions]
 }
+
+# Create access entry for your personal AWS user
+resource "aws_eks_access_entry" "personal_access" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = "arn:aws:iam::909561835411:root"
+  type          = "STANDARD"
+
+  depends_on = [module.eks]
+}
+resource "aws_eks_access_policy_association" "personal_admin" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = "arn:aws:iam::909561835411:root"
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.personal_access]
+}
