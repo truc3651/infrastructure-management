@@ -33,13 +33,13 @@ resource "helm_release" "argocd" {
           # It tells: which Kubernetes resources belong to which applications
           "application.resourceTrackingMethod" = "annotation"
 
-          # Configure Git polling interval (default is 3 minutes)
+          # Configure Git polling interval (3 minutes)
           "timeout.reconciliation" = "180s"
         }
 
         repositories = {
-          backend-deployments = {
-            url  = "https://github.com/truc3651/backend-deployments.git"
+          backend-deployment = {
+            url  = "https://github.com/truc3651/backend-deployment.git"
             type = "git"
           }
         }

@@ -1,3 +1,12 @@
+resource "kubernetes_namespace" "gateway" {
+  metadata {
+    name = var.gateway_namespace
+    labels = {
+      managed-by = "terraform"
+    }
+  }
+}
+
 resource "aws_iam_policy" "aws_load_balancer_controller" {
   name = "${var.cluster_name}-aws-load-balancer-controller"
   policy = jsonencode({
@@ -243,17 +252,6 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
   })
 }
 
-# IRSA = IAM Roles for Service Accounts
-# 1. Node notices pod has service account with annotation eks.amazonaws.com/role-arn pointing to IAM role
-# 2. Kubelet asks K8s API Server to issue a JWT Service Acccount token with
-#    - sub (who the token is about): system:serviceaccount:gateway-system:aws-load-balancer-controller
-#    - aud (who the token is intended for): sts.amazonaws.com
-#    - iss (who created the token, sts knows where to fetch the publis key for verification): https://oidc.eks.us-east-1.amazonaws.com/id/EXAMPLED539D4633E53DE44EXAMPLE
-#    - K8s API Server sign this token using its private key
-#    - Give to kubelet to save to specific pod's filesystem
-# 3. When aws controller pod trying to make nlb
-#    - aws sdk reads token from file and use STS AssumeRoleWithWebIdentity API with IAM role it wants to assume
-#    - reconcile sub and aud to match what expect then issue temporary credentials
 resource "aws_iam_role" "aws_load_balancer_controller" {
   name = "${var.cluster_name}-aws-load-balancer-controller"
   assume_role_policy = jsonencode({
@@ -265,6 +263,7 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
         Federated = var.oidc_provider_arn
       }
       Condition = {
+        # Only service account named aws-load-balancer-controller in the gateway namespace can assume this role
         StringEquals = {
           "${replace(var.oidc_provider, "https://", "")}:sub" = "system:serviceaccount:${var.gateway_namespace}:aws-load-balancer-controller"
           "${replace(var.oidc_provider, "https://", "")}:aud" = "sts.amazonaws.com"
@@ -279,15 +278,10 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   role       = aws_iam_role.aws_load_balancer_controller.name
 }
 
-resource "kubernetes_namespace" "gateway" {
-  metadata {
-    name = var.gateway_namespace
-    labels = {
-      managed-by = "terraform"
-    }
-  }
-}
-
+# Deploys the actual AWS Load Balancer Controller as pods running inside gateway namespace
+# There's an infinite loop that watches the Kubernetes API for changes
+# When a Gateway resource create, the controller create an NLB in AWS. 
+# When an HTTPRoute created, it configs the NLB's target groups to point traffic at the correct pod IPs
 resource "helm_release" "aws_load_balancer_controller" {
   name       = "aws-load-balancer-controller"
   repository = "https://aws.github.io/eks-charts"
@@ -310,11 +304,13 @@ resource "helm_release" "aws_load_balancer_controller" {
     value = "aws-load-balancer-controller"
   }
   
+  # when this pod starts, EKS generates an OIDC token, and injects temporary AWS credentials into the pod.
   set {
     name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
     value = aws_iam_role.aws_load_balancer_controller.arn
   }
   
+  # In addition to watching for traditional Ingress resources, also watch for the newer Gateway API resources
   set {
     name  = "enableGatewayAPI"
     value = "true"

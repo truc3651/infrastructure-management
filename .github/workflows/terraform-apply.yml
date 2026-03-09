@@ -46,7 +46,11 @@ jobs:
               DEPLOYMENTS=$(echo '[
                 {"env": "'$ENV'", "component": "vpc"},
                 {"env": "'$ENV'", "component": "eks-cluster"},
+                {"env": "'$ENV'", "component": "rds-cluster"},
+                {"env": "'$ENV'", "component": "rds-database-factory"},
                 {"env": "'$ENV'", "component": "eks-addons"},
+                {"env": "'$ENV'", "component": "kafka-cluster"},
+                {"env": "'$ENV'", "component": "debezium"},
                 {"env": "'$ENV'", "component": "ecr"}
               ]' | jq -c)
             else
@@ -77,7 +81,7 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Generate OIDC token for AWS authentication
 
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +92,7 @@ jobs:
           terraform-version: ${{ env.TERRAFORM_VERSION }}
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
           aws-region: ${{ env.AWS_REGION }}
-          aws-role: ${{ env.AWS_ROLE_ARN }}
+          aws-role: ${{ env.AWS_ROLE_ARN }} # Tell the setup action to assume GitHubActionsRole
 
       - name: Terragrunt Init
         working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}

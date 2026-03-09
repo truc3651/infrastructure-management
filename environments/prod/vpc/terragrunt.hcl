@@ -2,17 +2,13 @@ include "root" {
   path = find_in_parent_folders()
 }
 
-include "env" {
-  path   = find_in_parent_folders("env.hcl")
-  expose = true
-}
-
 terraform {
   source = "../../../modules/vpc"
 }
 
 inputs = {
-  vpc_cidr = "10.0.0.0/16"
+  cluster_name     = "backend"
+  vpc_cidr         = "10.0.0.0/16"
 
   public_subnets = {
     az1 = {
@@ -35,7 +31,4 @@ inputs = {
       availability_zone = "ap-southeast-1b"
     }
   }
-
-  enable_nat_gateway = include.env.locals.enable_nat_gateway
-  single_nat_gateway = include.env.locals.single_nat_gateway
 }

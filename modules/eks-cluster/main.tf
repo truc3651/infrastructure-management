@@ -1,5 +1,5 @@
 resource "aws_kms_key" "eks_cluster_secrets" {
-  description              = "KMS key for EKS cluster ${var.cluster_name} secrets encryption"
+  description              = "KMS key for cluster ${var.vpc_cluster_name} secrets encryption"
   deletion_window_in_days  = 7
   enable_key_rotation      = true
   key_usage                = "ENCRYPT_DECRYPT"
@@ -7,12 +7,12 @@ resource "aws_kms_key" "eks_cluster_secrets" {
 }
 
 resource "aws_kms_alias" "eks_cluster_secrets" {
-  name          = "alias/${var.cluster_name}-eks-cluster-secrets-abc"
+  name          = "alias/${var.vpc_cluster_name}-eks-cluster-secrets"
   target_key_id = aws_kms_key.eks_cluster_secrets.key_id
 }
 
 resource "aws_security_group" "cluster" {
-  name_prefix = "${var.cluster_name}-cluster-sg"
+  name_prefix = "${var.vpc_cluster_name}-cluster-sg"
   description = "Security group for EKS cluster control plane"
   vpc_id      = var.vpc_id
 
@@ -25,12 +25,12 @@ resource "aws_security_group" "cluster" {
   }
 
   tags = {
-    Name = "${var.cluster_name}-cluster-sg"
+    Name = "${var.vpc_cluster_name}-cluster-sg"
   }
 }
 
 resource "aws_security_group" "node" {
-  name_prefix = "${var.cluster_name}-node-sg"
+  name_prefix = "${var.vpc_cluster_name}-node-sg"
   description = "Security group for EKS worker nodes"
   vpc_id      = var.vpc_id
 
@@ -59,7 +59,7 @@ resource "aws_security_group" "node" {
   }
 
   tags = {
-    Name = "${var.cluster_name}-node-sg"
+    Name = "${var.vpc_cluster_name}-node-sg"
   }
 }
 
@@ -77,7 +77,7 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
 
-  cluster_name    = var.cluster_name
+  cluster_name    = var.vpc_cluster_name
   cluster_version = "1.34"
 
   vpc_id     = var.vpc_id
@@ -109,7 +109,7 @@ module "eks" {
 
   eks_managed_node_groups = {
     main = {
-      name = "${var.cluster_name}-node-group"
+      name = "${var.vpc_cluster_name}-node-group"
 
       min_size     = var.min_nodes
       max_size     = var.max_nodes
@@ -130,49 +130,33 @@ module "eks" {
   # access within VPC
   cluster_endpoint_private_access = true
 
-  # Disable automatic access entry creation
-  enable_cluster_creator_admin_permissions = false
+  # Whoever creates an EKS cluster automatically gets admin access to it
+  enable_cluster_creator_admin_permissions = true
   
   # Don't let the module create access entries automatically
   authentication_mode = "API_AND_CONFIG_MAP"
-}
 
-# Manually create access entry for GitHub Actions role
-resource "aws_eks_access_entry" "github_actions" {
-  cluster_name  = module.eks.cluster_name
-  principal_arn = data.aws_iam_role.github_actions.arn
-  type          = "STANDARD"
-
-  depends_on = [module.eks]
-}
-resource "aws_eks_access_policy_association" "github_actions_admin" {
-  cluster_name  = module.eks.cluster_name
-  principal_arn = data.aws_iam_role.github_actions.arn
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-
-  access_scope {
-    type = "cluster"
+  cluster_upgrade_policy = {
+    support_type = "STANDARD"
   }
-
-  depends_on = [aws_eks_access_entry.github_actions]
 }
 
 # Create access entry for your personal AWS user
 resource "aws_eks_access_entry" "personal_access" {
-  cluster_name  = module.eks.cluster_name
-  principal_arn = "arn:aws:iam::909561835411:root"
+  cluster_name  = module.eks.vpc_cluster_name
+  principal_arn = var.root_account_arn
   type          = "STANDARD"
 
-  depends_on = [module.eks]
+  depends_on    = [module.eks]
 }
 resource "aws_eks_access_policy_association" "personal_admin" {
   cluster_name  = module.eks.cluster_name
-  principal_arn = "arn:aws:iam::909561835411:root"
+  principal_arn = var.root_account_arn
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
 
   access_scope {
     type = "cluster"
   }
 
-  depends_on = [aws_eks_access_entry.personal_access]
+  depends_on    = [aws_eks_access_entry.personal_access]
 }

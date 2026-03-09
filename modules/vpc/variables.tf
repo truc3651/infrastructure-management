@@ -4,7 +4,6 @@ variable "cluster_name" {
 
 variable "vpc_cidr" {
   type    = string
-  default = "10.0.0.0/16"
 }
 
 variable "public_subnets" {
@@ -19,9 +18,4 @@ variable "private_subnets" {
     cidr_block        = string
     availability_zone = string
   }))
-}
-
-variable "enable_nat_gateway" {
-  type    = bool
-  default = true
 }

@@ -21,7 +21,7 @@ locals {
 
 generate "provider" {
   path      = "provider.tf"
-  if_exists = local.component == "eks-addons" ? "skip" : "overwrite_terragrunt"
+  if_exists = contains(["eks-addons", "rds-database-factory", "kafka-cluster", "debezium"], local.component) ? "skip" : "overwrite_terragrunt"
   contents  = <<EOF
 terraform {
   required_version = ">= 1.5"

@@ -25,12 +25,14 @@ resource "aws_ecr_lifecycle_policy" "repo_lifecycle_policy" {
   ]
 }
 
+# Docker Hub rate-limits anonymous pulls (100 pulls per 6 hours for anonymous)
+# By providing credentials against Docker Hub to get higher pull limits
 data "aws_secretsmanager_secret" "dockerio" {
   name = "ecr-pullthroughcache/dockerhub"
 }
 
 resource "aws_ecr_pull_through_cache_rule" "dockerio" {
   credential_arn        = data.aws_secretsmanager_secret.dockerio.arn
-  ecr_repository_prefix = "docker-hub"
-  upstream_registry_url = "registry-1.docker.io"
+  ecr_repository_prefix = "docker-hub" # define namespace under which cached images
+  upstream_registry_url = "registry-1.docker.io" # Dockerhub primary endpoint
 }

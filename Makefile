@@ -1,21 +1,24 @@
 # Creates S3 bucket and DynamoDB table for Terraform state management
 
+DOCKER_USERNAME ?= trucstre
+DOCKER_PASSWORD ?= $(shell echo "$$DOCKER_PASSWORD")
 BUCKET_NAME ?= truc2001-terraform-remotes
 TABLE_NAME ?= terraform-locks
 AWS_REGION ?= ap-southeast-1
 AWS_PROFILE ?= personal
 ROLE_NAME ?= GitHubActionsRole
 
-.PHONY: help bootstrap create-bucket create-dynamodb destroy-backend create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn clean-policies
+.PHONY: help bootstrap create-bucket create-dynamodb destroy-backend create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn clean-policies delete-docker-secret
 
 help:
 	@echo "Terraform Backend Bootstrap"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make bootstrap        		- Create S3 bucket, DynamoDB table, OIDC provider, and IAM role"
+	@echo "  make bootstrap        		- Create S3 bucket, Create ECR Docker secret, DynamoDB table, OIDC provider, and IAM role"
+	@echo "  make create-docker-secret  - Create ECR Docker secret"
 	@echo "  make create-bucket    		- Create S3 bucket only"
 	@echo "  make create-dynamodb  		- Create DynamoDB table only"
-	@echo "  make destroy-backend  		- Delete S3 bucket and DynamoDB table"
+  make destroy-backend  		- Delete S3 bucket and DynamoDB table"
 	@echo "  make create-oidc-provider 	- Create GitHub OIDC provider"
 	@echo "  make create-iam-role      	- Create IAM role for GitHub Actions"
 	@echo "  make attach-policies      	- Attach AWS managed policies to IAM role"
@@ -30,7 +33,16 @@ help:
 	@echo "  AWS_PROFILE  				- AWS profile (default: personal)"
 	@echo "  ROLE_NAME    				- IAM role name (default: GitHubActionsRole)"
 
-bootstrap: create-bucket create-dynamodb create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn
+bootstrap: create-docker-secret create-bucket create-dynamodb create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn
+
+create-docker-secret:
+	@echo "Creating ECR Docker secret..."
+	@aws secretsmanager create-secret \
+		--profile $(AWS_PROFILE) \
+		--name "ecr-pullthroughcache/dockerhub" \
+		--description "Docker Hub credentials for ECR pull through cache" \
+		--secret-string '{"username":"$(DOCKER_USERNAME)","password":"$(DOCKER_PASSWORD)"}' \
+		2>/dev/null && echo "✓ Docker secret created" || echo "✓ Docker secret already exists"
 
 create-bucket:
 	@echo "Creating S3 bucket: $(BUCKET_NAME)"
@@ -260,6 +272,18 @@ attach-custom-policies:
 					"Effect": "Allow", \
 					"Action": "elasticloadbalancing:*", \
 					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "RDSFullAccess", \
+					"Effect": "Allow", \
+					"Action": "rds:*", \
+					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "SecretsManagerFullAccess", \
+					"Effect": "Allow", \
+					"Action": "secretsmanager:*", \
+					"Resource": "*" \
 				} \
 			] \
 		}' 2>/dev/null && echo "✓ Consolidated policy created" || echo "✓ Consolidated policy already exists"
@@ -318,119 +342,3 @@ get-role-arn:
 		echo "❌ Role '$(ROLE_NAME)' not found."; \
 		echo "Run 'make create-iam-role' first."; \
 	fi
-
-destroy-backend:
-	@echo "WARNING: This will delete all Terraform state!"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-
-	@echo "Detaching consolidated custom policy..."
-	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
-	aws iam detach-role-policy \
-		--profile $(AWS_PROFILE) \
-		--role-name $(ROLE_NAME) \
-		--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/GitHubActions-Consolidated-FullAccess 2>/dev/null || true
-
-	@echo "Detaching old individual custom policies if any exist..."
-	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
-	for policy in GitHubActions-IAM-FullAccess GitHubActions-CloudWatchLogs-FullAccess GitHubActions-KMS-FullAccess GitHubActions-EKS-FullAccess GitHubActions-AutoScaling-FullAccess GitHubActions-ELB-FullAccess GitHubActions-STS-FullAccess; do \
-		aws iam detach-role-policy \
-			--profile $(AWS_PROFILE) \
-			--role-name $(ROLE_NAME) \
-			--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/$$policy 2>/dev/null || true; \
-	done
-
-	@echo "Detaching AWS managed policies..."
-	@aws iam list-attached-role-policies \
-		--profile $(AWS_PROFILE) \
-		--role-name $(ROLE_NAME) \
-		--query 'AttachedPolicies[].PolicyArn' \
-		--output text 2>/dev/null | \
-		xargs -n1 -I {} aws iam detach-role-policy \
-			--profile $(AWS_PROFILE) \
-			--role-name $(ROLE_NAME) \
-			--policy-arn {} 2>/dev/null || true
-
-	@echo "Deleting consolidated custom policy..."
-	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
-	aws iam delete-policy \
-		--profile $(AWS_PROFILE) \
-		--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/GitHubActions-Consolidated-FullAccess 2>/dev/null \
-		&& echo "✓ Consolidated policy deleted" || true
-
-	@echo "Deleting old individual custom policies..."
-	@ACCOUNT_ID=$$(aws sts get-caller-identity --profile $(AWS_PROFILE) --query Account --output text); \
-	for policy in GitHubActions-IAM-FullAccess GitHubActions-CloudWatchLogs-FullAccess GitHubActions-KMS-FullAccess GitHubActions-EKS-FullAccess GitHubActions-AutoScaling-FullAccess GitHubActions-ELB-FullAccess GitHubActions-STS-FullAccess; do \
-		aws iam delete-policy \
-			--profile $(AWS_PROFILE) \
-			--policy-arn arn:aws:iam::$$ACCOUNT_ID:policy/$$policy 2>/dev/null \
-			&& echo "✓ $$policy deleted" || true; \
-	done
-
-	@echo "Deleting IAM role..."
-	@aws iam delete-role \
-		--profile $(AWS_PROFILE) \
-		--role-name $(ROLE_NAME) 2>/dev/null \
-		&& echo "✓ IAM role deleted" || echo "✓ IAM role not found"
-
-	@echo "Deleting OIDC provider..."
-	@OIDC_ARN=$$(aws iam list-open-id-connect-providers \
-		--profile $(AWS_PROFILE) \
-		--query "OpenIDConnectProviderList[?contains(Arn, 'token.actions.githubusercontent.com')].Arn" \
-		--output text 2>/dev/null); \
-	if [ -n "$$OIDC_ARN" ]; then \
-		aws iam delete-open-id-connect-provider \
-			--profile $(AWS_PROFILE) \
-			--open-id-connect-provider-arn $$OIDC_ARN 2>/dev/null \
-			&& echo "✓ OIDC provider deleted" || true; \
-	else \
-		echo "✓ OIDC provider not found"; \
-	fi
-
-	@echo "Deleting all object versions from S3 bucket..."
-	@aws s3api list-object-versions \
-		--profile $(AWS_PROFILE) \
-		--bucket $(BUCKET_NAME) \
-		--query 'Versions[].{Key:Key,VersionId:VersionId}' \
-		--output json 2>/dev/null | \
-		jq -c '.[]' 2>/dev/null | \
-		while read obj; do \
-			key=$$(echo $$obj | jq -r '.Key'); \
-			vid=$$(echo $$obj | jq -r '.VersionId'); \
-			aws s3api delete-object \
-				--profile $(AWS_PROFILE) \
-				--bucket $(BUCKET_NAME) \
-				--key "$$key" \
-				--version-id "$$vid" 2>/dev/null || true; \
-		done || true
-
-	@aws s3api list-object-versions \
-		--profile $(AWS_PROFILE) \
-		--bucket $(BUCKET_NAME) \
-		--query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' \
-		--output json 2>/dev/null | \
-		jq -c '.[]' 2>/dev/null | \
-		while read obj; do \
-			key=$$(echo $$obj | jq -r '.Key'); \
-			vid=$$(echo $$obj | jq -r '.VersionId'); \
-			aws s3api delete-object \
-				--profile $(AWS_PROFILE) \
-				--bucket $(BUCKET_NAME) \
-				--key "$$key" \
-				--version-id "$$vid" 2>/dev/null || true; \
-		done || true
-
-	@echo "Deleting S3 bucket..."
-	@aws s3api delete-bucket \
-		--profile $(AWS_PROFILE) \
-		--bucket $(BUCKET_NAME) 2>/dev/null \
-		&& echo "✓ S3 bucket deleted" || echo "✓ S3 bucket not found"
-
-	@echo "Deleting DynamoDB table..."
-	@aws dynamodb delete-table \
-		--profile $(AWS_PROFILE) \
-		--region $(AWS_REGION) \
-		--table-name $(TABLE_NAME) 2>/dev/null \
-		&& echo "✓ DynamoDB table deleted" || echo "✓ DynamoDB table not found"
-
-	@echo ""
-	@echo "✓ Backend infrastructure destroyed"
