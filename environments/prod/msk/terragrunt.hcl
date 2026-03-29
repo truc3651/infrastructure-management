@@ -47,7 +47,8 @@ inputs = {
   vpc_id     = dependency.vpc.outputs.vpc_id
   subnet_ids = dependency.vpc.outputs.private_subnet_ids_list
 
-  # num_of_broker_nodes must equal the count of subnet_ids
+  # requires that brokers are evenly distributed across AZ
+  # for 2 broker nodes, we need at least 2 subnets in different AZs
   num_of_broker_nodes    = 2
   kafka_version          = "3.6.0"
   broker_instance_type   = "kafka.t3.small"
@@ -55,7 +56,7 @@ inputs = {
 
   auto_create_topics      = true
   num_partitions          = 2
-  num_replication_factor  = 3
+  num_replication_factor  = 2
   num_min_insync_replicas = 2
   log_retention_hours     = 1
 
@@ -69,7 +70,7 @@ inputs = {
 
   debezium_version = "2.7.4"
   cdc_connectors = {
-    "users-cdc-connector" = {
+    "users" = {
       database_name      = "users_prod"
       schema_name        = "users"
       table_include_list = ["t_friend_requests", "t_users"]

@@ -9,7 +9,6 @@ locals {
   # Common variables
   env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
   aws_region   = local.env_vars.locals.aws_region
-  cluster_name = local.env_vars.locals.cluster_name
 
   # Common tags applied to all resources
   common_tags = {
@@ -21,7 +20,7 @@ locals {
 
 generate "provider" {
   path      = "provider.tf"
-  if_exists = contains(["eks-addons", "rds-database-factory", "kafka-cluster", "debezium"], local.component) ? "skip" : "overwrite_terragrunt"
+  if_exists = contains(["eks-addons", "rds-cluster", "rds-database-factory", "msk", "debezium"], local.component) ? "skip" : "overwrite_terragrunt"
   contents  = <<EOF
 terraform {
   required_version = ">= 1.5"
@@ -66,6 +65,5 @@ remote_state {
 inputs = {
   environment  = local.environment
   aws_region   = local.aws_region
-  cluster_name = local.cluster_name
   common_tags  = local.common_tags
 }

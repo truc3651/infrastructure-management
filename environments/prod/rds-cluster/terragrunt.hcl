@@ -17,6 +17,7 @@ dependency "vpc" {
   mock_outputs = {
     vpc_id                  = "vpc-mock"
     private_subnet_ids_list = ["subnet-mock-1", "subnet-mock-2"]
+    public_subnet_ids_list  = ["subnet-mock-3", "subnet-mock-4"]
   }
 }
 
@@ -35,6 +36,7 @@ inputs = {
   vpc_id             = dependency.vpc.outputs.vpc_id
   cluster_name       = dependency.vpc.outputs.cluster_name
   private_subnet_ids = dependency.vpc.outputs.private_subnet_ids_list
+  public_subnet_ids  = dependency.vpc.outputs.public_subnet_ids_list
 
   # Allow EKS nodes to connect to the database
   allowed_security_group_ids = [dependency.eks_cluster.outputs.node_security_group_id]
@@ -53,7 +55,8 @@ inputs = {
   performance_insights_retention_period = 7
   auto_minor_version_upgrade = true
   apply_immediately = false
-  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+  enabled_cloudwatch_logs_exports = ["postgresql"]
   preferred_backup_window = "03:00-04:00"
   preferred_maintenance_window = "sun:04:00-sun:05:00"
+  idle_in_transaction_session_timeout = "30000"
 }

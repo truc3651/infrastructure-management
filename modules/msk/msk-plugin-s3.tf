@@ -1,8 +1,8 @@
 resource "aws_s3_bucket" "msk_plugins" {
-  bucket = "${var.cluster_name}-msk-plugins-${data.aws_caller_identity.current.account_id}"
+  bucket = "msk-plugins-${data.aws_caller_identity.current.account_id}-${var.environment}"
 
   tags = {
-    Name        = "${var.cluster_name}-msk-plugins"
+    Name        = "msk-plugins-${var.environment}"
     Environment = var.environment
   }
 }
@@ -32,7 +32,6 @@ resource "aws_s3_bucket_public_access_block" "msk_plugins" {
   restrict_public_buckets = true
 }
 
-# Debezium Plugin — Download, Package, and Register with MSK Connect
 locals {
   debezium_final_version   = "${var.debezium_version}.Final"
   debezium_plugin_zip_key  = "debezium-connector-postgres-${var.debezium_version}.zip"

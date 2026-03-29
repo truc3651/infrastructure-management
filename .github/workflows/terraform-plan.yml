@@ -3,8 +3,10 @@ name: Terraform Plan
 on:
   pull_request:
     branches: [ master ]
-  push:
-    branches: [ master ]
+    paths:
+      - 'environments/**'
+      - 'modules/**'
+      - '*.hcl'
 
 env:
   TERRAGRUNT_VERSION: ${{ vars.TERRAGRUNT_VERSION }}
@@ -20,19 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Downloads ENTIRE git history
+          fetch-depth: 0
 
       - name: Detect changed components
         id: changes
         run: |
-          # Get list of changed files
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- environments/)
-          else
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- environments/)
-          fi
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- environments/)
 
-          # Extract unique environment/component combinations
           COMPONENTS=$(echo "$CHANGED_FILES" | \
             grep -oP 'environments/\K[^/]+/[^/]+' | \
             sort -u | \
@@ -45,7 +41,6 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.components != '[]'
     runs-on: ubuntu-latest
-    # Run job per changed component in parallel
     strategy:
       matrix:
         component: ${{ fromJson(needs.detect-changes.outputs.components) }}
@@ -53,8 +48,8 @@ jobs:
 
     permissions:
       contents: read
-      pull-requests: write # comment on PR
-      id-token: write  # request temporary AWS credentials via OIDC
+      pull-requests: write
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -71,3 +66,4 @@ jobs:
         uses: ./.github/actions/terragrunt-plan
         with:
           working-directory: environments/${{ matrix.component }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

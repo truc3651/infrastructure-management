@@ -1,22 +1,8 @@
-resource "aws_kms_key" "eks_cluster_secrets" {
-  description              = "KMS key for cluster ${var.vpc_cluster_name} secrets encryption"
-  deletion_window_in_days  = 7
-  enable_key_rotation      = true
-  key_usage                = "ENCRYPT_DECRYPT"
-  customer_master_key_spec = "SYMMETRIC_DEFAULT"
-}
-
-resource "aws_kms_alias" "eks_cluster_secrets" {
-  name          = "alias/${var.vpc_cluster_name}-eks-cluster-secrets"
-  target_key_id = aws_kms_key.eks_cluster_secrets.key_id
-}
-
 resource "aws_security_group" "cluster" {
   name_prefix = "${var.vpc_cluster_name}-cluster-sg"
   description = "Security group for EKS cluster control plane"
   vpc_id      = var.vpc_id
 
-  # Allow all outbound traffic
   egress {
     from_port   = 0
     to_port     = 0
@@ -50,7 +36,14 @@ resource "aws_security_group" "node" {
     security_groups = [aws_security_group.cluster.id]
   }
 
-  # Allow all outbound traffic
+  # Allow cluster to communicate with nodes
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.cluster.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -61,16 +54,6 @@ resource "aws_security_group" "node" {
   tags = {
     Name = "${var.vpc_cluster_name}-node-sg"
   }
-}
-
-# Allow cluster to communicate with nodes
-resource "aws_security_group_rule" "cluster_to_node" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  security_group_id        = aws_security_group.cluster.id
-  source_security_group_id = aws_security_group.node.id
 }
 
 module "eks" {
@@ -89,12 +72,6 @@ module "eks" {
 
   create_node_security_group = false
   node_security_group_id     = aws_security_group.node.id
-
-  # Enable secrets encryption with KMS
-  cluster_encryption_config = {
-    provider_key_arn = aws_kms_key.eks_cluster_secrets.arn
-    resources        = ["secrets"]
-  }
 
   # Use a minimal node group for cost optimization
   eks_managed_node_group_defaults = {
@@ -141,9 +118,9 @@ module "eks" {
   }
 }
 
-# Create access entry for your personal AWS user
+# Create access entry for your root AWS account
 resource "aws_eks_access_entry" "personal_access" {
-  cluster_name  = module.eks.vpc_cluster_name
+  cluster_name  = var.vpc_cluster_name
   principal_arn = var.root_account_arn
   type          = "STANDARD"
 

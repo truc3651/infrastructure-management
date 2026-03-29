@@ -1,3 +1,7 @@
+resource "aws_iam_service_linked_role" "kafka_connect" {
+  aws_service_name = "kafkaconnect.amazonaws.com"
+}
+
 resource "aws_security_group" "msk_connect" {
   name_prefix = "${var.cluster_name}-msk-connect-sg-"
   description = "Security group for MSK Connect Debezium workers"
@@ -31,7 +35,7 @@ resource "aws_security_group" "msk_connect" {
 
 # MSK Connect Service Execution Role
 resource "aws_iam_role" "msk_connect" {
-  name = "${var.cluster_name}-msk-connect"
+  name = "msk-connect-${var.environment}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -48,94 +52,40 @@ resource "aws_iam_role" "msk_connect" {
   })
 
   tags = {
-    Name        = "${var.cluster_name}-msk-connect-role"
+    Name        = "msk-connect-role-${var.environment}"
     Environment = var.environment
   }
 }
 
+### TEMPORARY: Full admin to isolate whether the 403 is a permission issue or not.
+### If this works → it's a missing permission. If still 403 → it's network/config.
+### TODO: Revert to scoped policy after debugging.
 resource "aws_iam_role_policy" "msk_connect" {
   name = "msk-connect-policy"
   role = aws_iam_role.msk_connect.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "MSKClusterAccess"
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:Connect",
-          "kafka-cluster:DescribeCluster",
-          "kafka-cluster:AlterCluster",
-          "kafka-cluster:DescribeTopic",
-          "kafka-cluster:CreateTopic",
-          "kafka-cluster:WriteData",
-          "kafka-cluster:ReadData",
-          "kafka-cluster:WriteDataIdempotently",
-          "kafka-cluster:DescribeGroup",
-          "kafka-cluster:AlterGroup",
-          "kafka-cluster:DeleteTopic",
-        ]
-        Resource = [
-          aws_msk_cluster.this.arn,
-          "${aws_msk_cluster.this.arn}/*",
-        ]
-      },
-      {
-        Sid    = "S3PluginAccess"
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:ListBucket"]
-        Resource = [
-          aws_s3_bucket.msk_plugins.arn,
-          "${aws_s3_bucket.msk_plugins.arn}/*",
-        ]
-      },
-      {
-        Sid    = "SecretsManagerAccess"
-        Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-        Resource = [
-          var.master_credentials_secret_arn,
-          "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:msk-connect/${var.environment}/*",
-        ]
-      },
-      {
-        Sid    = "KMSAccess"
-        Effect = "Allow"
-        Action = ["kms:GenerateDataKey", "kms:Decrypt"]
-        Resource = [
-          aws_kms_key.msk.arn,
-          var.rds_kms_key_arn,
-        ]
-      },
-      {
-        Sid    = "CloudWatchLogs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogStreams",
-        ]
-        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/msk/connect/*"
-      },
-    ]
+    Statement = [{
+      Sid      = "FullAccess"
+      Effect   = "Allow"
+      Action   = "*"
+      Resource = "*"
+    }]
   })
 }
 
-# Worker logs
 resource "aws_cloudwatch_log_group" "msk_connect" {
-  name              = "/aws/msk/connect/${var.cluster_name}"
+  name              = "/aws/msk/connect/${var.environment}"
   retention_in_days = 7
   kms_key_id        = aws_kms_key.msk.arn
 
   tags = {
-    Name        = "${var.cluster_name}-msk-connect-logs"
+    Name        = "msk-connect-logs-${var.environment}"
     Environment = var.environment
   }
 }
 
-# MSK Connect Connector
 resource "aws_mskconnect_connector" "cdc" {
   for_each = var.cdc_connectors
 
@@ -159,7 +109,7 @@ resource "aws_mskconnect_connector" "cdc" {
     "database.password" = random_password.debezium[each.key].result
     "database.dbname"   = each.value.database_name
 
-    # Events land at {topic_prefix}.{schema}.{table}
+    # Events land at postgres.users.t_users, postgres.users.t_friend_requests
     "topic.prefix"        = each.value.topic_prefix
     "schema.include.list" = each.value.schema_name
     "table.include.list"  = join(",", each.value.table_include_list)
@@ -196,7 +146,7 @@ resource "aws_mskconnect_connector" "cdc" {
 
   kafka_cluster {
     apache_kafka_cluster {
-      bootstrap_servers = aws_msk_cluster.this.bootstrap_brokers_tls
+      bootstrap_servers = aws_msk_cluster.this.bootstrap_brokers_sasl_iam
 
       vpc {
         security_groups = [aws_security_group.msk_connect.id]
@@ -206,7 +156,7 @@ resource "aws_mskconnect_connector" "cdc" {
   }
 
   kafka_cluster_client_authentication {
-    authentication_type = "NONE"
+    authentication_type = "IAM"
   }
 
   kafka_cluster_encryption_in_transit {
@@ -232,6 +182,7 @@ resource "aws_mskconnect_connector" "cdc" {
   service_execution_role_arn = aws_iam_role.msk_connect.arn
 
   depends_on = [
+    aws_iam_service_linked_role.kafka_connect,
     aws_iam_role_policy.msk_connect,
     postgresql_grant.debezium_tables_select,
     aws_secretsmanager_secret_version.connector_credentials,

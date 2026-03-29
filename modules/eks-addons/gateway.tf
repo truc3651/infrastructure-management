@@ -24,17 +24,8 @@ resource "kubectl_manifest" "gateway_api_crds" {
 
 # It's saying "anyone creates a Gateway using this class, the AWS Load Balancer Controller is responsible for implementing it."
 resource "kubectl_manifest" "gateway_class" {
-  yaml_body = yamlencode({
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "GatewayClass"
-    metadata = {
-      name = "aws-nlb"
-    }
-    spec = {
-      # This AWS Load Balancer Controller will responsible to create AWS NLB or ALB
-      controllerName = "gateway.networking.k8s.io/aws-gateway-controller"
-    }
-  })
+  yaml_body = templatefile("${path.module}/manifests/gateway-class.yaml.tpl", {})
+
   depends_on = [
     helm_release.aws_load_balancer_controller,
     kubectl_manifest.gateway_api_crds
@@ -42,41 +33,10 @@ resource "kubectl_manifest" "gateway_class" {
 }
 
 resource "kubectl_manifest" "main_gateway" {
-  yaml_body = yamlencode({
-    apiVersion = "gateway.networking.k8s.io/v1"
-    kind       = "Gateway"
-    metadata = {
-      name      = "main-gateway"
-      namespace = var.gateway_namespace
-      annotations = {
-        # "external" = create the NLB (public-facing)
-        # "internal" = create the NLB (internal-only network interfaces)
-        "service.beta.kubernetes.io/aws-load-balancer-type"            = "external"
-        "service.beta.kubernetes.io/aws-load-balancer-scheme"          = "internet-facing"
-        # This tells the controller how to route traffic to pods.
-        # - "ip": NLB sends traffic directly to pod IP addresses (fewer hops, lower latency)
-        # - "instance": NLB sends traffic to the EC2 node, and then kube-proxy on the node forwards it to the right pod
-        "service.beta.kubernetes.io/aws-load-balancer-nlb-target-type" = "ip"
-        # Without this, AWS would assign a random public IP
-        "service.beta.kubernetes.io/aws-load-balancer-eip-allocations" = aws_eip.nlb.id
-        "service.beta.kubernetes.io/aws-load-balancer-subnets"         = var.public_subnet_ids[0]
-      }
-    }
-    spec = {
-      gatewayClassName = kubectl_manifest.gateway_class.name
-      listeners = [
-        {
-          name     = "http"
-          protocol = "TCP"
-          port     = 80
-        },
-        {
-          name     = "https"
-          protocol = "TCP"
-          port     = 443
-        }
-      ]
-    }
+  yaml_body = templatefile("${path.module}/manifests/gateway.yaml.tpl", {
+    gateway_namespace = var.gateway_namespace
+    nlb_eip_id        = aws_eip.nlb.id
+    public_subnet_id  = var.public_subnet_ids[0]
   })
 
   depends_on = [

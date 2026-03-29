@@ -1,4 +1,3 @@
-# PostgreSQL roles
 resource "random_password" "debezium" {
   for_each = var.cdc_connectors
 
@@ -10,14 +9,17 @@ resource "random_password" "debezium" {
 resource "postgresql_role" "debezium" {
   for_each = var.cdc_connectors
 
-  name     = "debezium_${replace(each.key, "-", "_")}"
+  name     = "debezium_${each.key}"
   password = random_password.debezium[each.key].result
 
   login           = true
-  replication     = true
+  replication     = false
   create_database = false
   create_role     = false
   superuser       = false
+
+  # Grant rds_replication role which allows logical replication slot usage.
+  roles = ["rds_replication"]
 }
 
 resource "postgresql_grant" "debezium_database_connect" {
@@ -53,7 +55,6 @@ resource "postgresql_grant" "debezium_tables_select" {
   depends_on = [postgresql_grant.debezium_schema_usage]
 }
 
-# Secret Manager
 resource "aws_secretsmanager_secret" "connector_credentials" {
   for_each = var.cdc_connectors
 

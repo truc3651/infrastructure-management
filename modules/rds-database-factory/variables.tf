@@ -13,11 +13,6 @@ variable "reader_endpoint" {
   type        = string
 }
 
-variable "cluster_port" {
-  description = "Aurora cluster port"
-  type        = number
-}
-
 variable "master_credentials_secret_arn" {
   description = "ARN of the Secrets Manager secret containing master credentials"
   type        = string

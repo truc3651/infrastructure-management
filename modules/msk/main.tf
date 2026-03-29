@@ -1,8 +1,38 @@
-# Encryption at Rest
 resource "aws_kms_key" "msk" {
   description             = "KMS key for MSK cluster encryption at rest"
   deletion_window_in_days = 7
   enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowAccountRoot"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowCloudWatchLogs"
+        Effect    = "Allow"
+        Principal = { Service = "logs.${data.aws_region.current.name}.amazonaws.com" }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*",
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/msk/*"
+          }
+        }
+      },
+    ]
+  })
 
   tags = {
     Name        = var.cluster_name
@@ -26,36 +56,22 @@ resource "aws_msk_configuration" "this" {
     default.replication.factor=${var.num_replication_factor}
     min.insync.replicas=${var.num_min_insync_replicas}
     log.retention.hours=${var.log_retention_hours}
-    log4j.logger.kafka=INFO
-    log4j.logger.kafka.controller=INFO
-    log4j.logger.state.change.logger=INFO
-    log4j.logger.kafka.log.LogCleaner=INFO
-    log4j.logger.kafka.request.logger=ERROR
   EOT
 }
 
-# Security Group
 resource "aws_security_group" "msk" {
   name_prefix = var.cluster_name
   description = "Security group for MSK cluster"
   vpc_id      = var.vpc_id
 
-  # EKS worker nodes → MSK (TLS port 9094)
-  # Allows pods running on EKS to produce/consume from MSK topics.
+  # EKS worker nodes → MSK (IRSA)
+  # MSK Connect workers → MSK (IAM auth)
   ingress {
-    description     = "EKS worker nodes to MSK (TLS)"
-    from_port       = 9094
-    to_port         = 9094
+    description     = "EKS worker nodes and MSK Connect workers to MSK"
+    from_port       = 9098
+    to_port         = 9098
     protocol        = "tcp"
-    security_groups = [var.eks_node_security_group_id]
-  }
-
-  ingress {
-    description     = "MSK Connect workers to MSK (TLS)"
-    from_port       = 9094
-    to_port         = 9094
-    protocol        = "tcp"
-    security_groups = [aws_security_group.msk_connect.id]
+    security_groups = [aws_security_group.msk_connect.id, var.eks_node_security_group_id]
   }
 
   egress {
@@ -99,6 +115,12 @@ resource "aws_msk_cluster" "this" {
     revision = aws_msk_configuration.this.latest_revision
   }
 
+  client_authentication {
+    sasl {
+      iam = true
+    }
+  }
+
   encryption_info {
     encryption_at_rest_kms_key_arn = aws_kms_key.msk.arn
 
@@ -133,4 +155,23 @@ resource "aws_msk_cluster" "this" {
   }
 
   depends_on = [aws_msk_configuration.this]
+}
+
+resource "aws_secretsmanager_secret" "bootstrap_brokers" {
+  name        = "msk/${var.environment}/bootstrap-brokers"
+  description = "MSK bootstrap broker endpoints for ${var.cluster_name} in ${var.environment}"
+  kms_key_id  = aws_kms_key.msk.arn
+
+  tags = {
+    Name        = "${var.cluster_name}-bootstrap-brokers-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "bootstrap_brokers" {
+  secret_id = aws_secretsmanager_secret.bootstrap_brokers.id
+  secret_string = jsonencode({
+    bootstrap_brokers_tls       = aws_msk_cluster.this.bootstrap_brokers_tls
+    bootstrap_brokers_plaintext = aws_msk_cluster.this.bootstrap_brokers
+  })
 }

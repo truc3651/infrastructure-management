@@ -30,7 +30,8 @@ resource "helm_release" "argocd" {
 
       configs = {
         cm = {
-          # It tells: which Kubernetes resources belong to which applications
+          # It tells: which Kubernetes resources belong to which Argocd Applications
+          #   Whether a resource is out of sync or orphaned
           "application.resourceTrackingMethod" = "annotation"
 
           # Configure Git polling interval (3 minutes)

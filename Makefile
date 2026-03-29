@@ -8,7 +8,12 @@ AWS_REGION ?= ap-southeast-1
 AWS_PROFILE ?= personal
 ROLE_NAME ?= GitHubActionsRole
 
-.PHONY: help bootstrap create-bucket create-dynamodb destroy-backend create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn clean-policies delete-docker-secret
+NEO4J_SECRET_NAME ?= neo4j/prod/backend-users
+NEO4J_URI ?= neo4j+s://2915d8e5.databases.neo4j.io
+NEO4J_USERNAME ?= 2915d8e5
+NEO4J_PASSWORD ?= tKDn9RrKI9zrS9KKePg5r2VExvIzsm1dg8PRxheuvsE
+
+.PHONY: help bootstrap create-bucket create-dynamodb destroy-backend create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn clean-policies delete-docker-secret create-neo4j-secret
 
 help:
 	@echo "Terraform Backend Bootstrap"
@@ -16,9 +21,10 @@ help:
 	@echo "Usage:"
 	@echo "  make bootstrap        		- Create S3 bucket, Create ECR Docker secret, DynamoDB table, OIDC provider, and IAM role"
 	@echo "  make create-docker-secret  - Create ECR Docker secret"
+	@echo "  make create-neo4j-secret   - Create Neo4j credentials secret"
 	@echo "  make create-bucket    		- Create S3 bucket only"
 	@echo "  make create-dynamodb  		- Create DynamoDB table only"
-  make destroy-backend  		- Delete S3 bucket and DynamoDB table"
+	@echo "  make destroy-backend  		- Delete S3 bucket and DynamoDB table"
 	@echo "  make create-oidc-provider 	- Create GitHub OIDC provider"
 	@echo "  make create-iam-role      	- Create IAM role for GitHub Actions"
 	@echo "  make attach-policies      	- Attach AWS managed policies to IAM role"
@@ -33,7 +39,7 @@ help:
 	@echo "  AWS_PROFILE  				- AWS profile (default: personal)"
 	@echo "  ROLE_NAME    				- IAM role name (default: GitHubActionsRole)"
 
-bootstrap: create-docker-secret create-bucket create-dynamodb create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn
+bootstrap: create-docker-secret create-bucket create-dynamodb create-oidc-provider create-iam-role attach-policies attach-custom-policies get-role-arn create-neo4j-secret
 
 create-docker-secret:
 	@echo "Creating ECR Docker secret..."
@@ -284,6 +290,50 @@ attach-custom-policies:
 					"Effect": "Allow", \
 					"Action": "secretsmanager:*", \
 					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "AmazonMSKFullAccess", \
+					"Effect": "Allow", \
+					"Action": "kafka:*", \
+					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "MSKConnectFullAccess", \
+					"Effect": "Allow", \
+					"Action": "kafkaconnect:*", \
+					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "S3FullAccess", \
+					"Effect": "Allow", \
+					"Action": "s3:*", \
+					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "MSKConnectRequiredPermissions", \
+					"Effect": "Allow", \
+					"Action": [ \
+						"iam:PassRole", \
+						"ec2:CreateNetworkInterface", \
+						"ec2:DeleteNetworkInterface", \
+						"ec2:DescribeNetworkInterfaces", \
+						"ec2:DescribeSubnets", \
+						"ec2:DescribeSecurityGroups", \
+						"ec2:DescribeVpcs", \
+						"kafka-cluster:*" \
+					], \
+					"Resource": "*" \
+				}, \
+				{ \
+					"Sid": "AllowPassMSKConnectRole", \
+					"Effect": "Allow", \
+					"Action": "iam:PassRole", \
+					"Resource": "arn:aws:iam::909561835411:role/msk-connect-*", \
+					"Condition": { \
+						"StringEquals": { \
+							"iam:PassedToService": "kafkaconnect.amazonaws.com" \
+						} \
+					} \
 				} \
 			] \
 		}' 2>/dev/null && echo "✓ Consolidated policy created" || echo "✓ Consolidated policy already exists"
@@ -324,6 +374,15 @@ clean-policies:
 	@echo "✓ Old policies cleaned"
 	@echo "Recreating consolidated policy..."
 	@$(MAKE) attach-custom-policies
+
+create-neo4j-secret:
+	@echo "Creating Neo4j credentials secret..."
+	@aws secretsmanager create-secret \
+		--profile $(AWS_PROFILE) \
+		--name "$(NEO4J_SECRET_NAME)" \
+		--description "Neo4j graph database credentials" \
+		--secret-string '{"uri":"$(NEO4J_URI)","username":"$(NEO4J_USERNAME)","password":"$(NEO4J_PASSWORD)"}' \
+		2>/dev/null && echo "✓ Neo4j secret created" || echo "✓ Neo4j secret already exists"
 
 get-role-arn:
 	@ROLE_ARN=$$(aws iam get-role --profile $(AWS_PROFILE) --role-name $(ROLE_NAME) --query 'Role.Arn' --output text 2>/dev/null); \

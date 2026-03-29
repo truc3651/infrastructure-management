@@ -4,21 +4,20 @@ data "aws_secretsmanager_secret_version" "master_credentials" {
 
 locals {
   master_database_name = "postgres"
-  master_creds = jsondecode(data.aws_secretsmanager_secret_version.master_credentials.secret_string)
+  master_secrets = jsondecode(data.aws_secretsmanager_secret_version.master_credentials.secret_string)
   
-  port               = 5432
-  writer_username    = "${var.application_name}_writer"
-  reader_username    = "${var.application_name}_reader"
-  migration_username = "${var.application_name}_migration"
+  writer_username    = "writer"
+  reader_username    = "reader"
+  migration_username = "migration"
 }
 
 
 provider "postgresql" {
-  host            = var.cluster_endpoint
-  port            = var.cluster_port
-  database        = local.master_database_name
-  username        = local.master_creds.username
-  password        = local.master_creds.password
+  host            = local.master_secrets.host
+  port            = local.master_secrets.port
+  database        = local.master_secrets.database
+  username        = local.master_secrets.username
+  password        = local.master_secrets.password
   sslmode         = "require"
   connect_timeout = 15
   superuser       = false
@@ -26,7 +25,7 @@ provider "postgresql" {
 
 resource "postgresql_database" "this" {
   name              = var.database_name
-  owner             = local.master_creds.username
+  owner             = local.master_secrets.username
   encoding          = "UTF8"
   lc_collate        = "en_US.UTF-8"
   lc_ctype          = "en_US.UTF-8"
@@ -43,7 +42,7 @@ resource "postgresql_schema" "this" {
 
   name     = each.value
   database = postgresql_database.this.name
-  owner    = local.master_creds.username
+  owner    = local.master_secrets.username
 
   lifecycle {
     prevent_destroy = false
@@ -70,21 +69,21 @@ resource "aws_secretsmanager_secret_version" "credentials" {
     # Writer
     host_writer     = var.cluster_endpoint
     username_writer = postgresql_role.writer.name
-    password_writer = random_password.writer.result
+    password_writer = random_password.writerr.result
 
     # Reader
     host_reader     = var.reader_endpoint
     username_reader = postgresql_role.reader.name
-    password_reader = random_password.reader.result
+    password_reader = random_password.readerr.result
 
     # Migration
     host_migration     = var.cluster_endpoint
     username_migration = postgresql_role.migration.name
-    password_migration = random_password.migration.result
+    password_migration = random_password.migrationn.result
 
     # Common details
     database = postgresql_database.this.name
-    port     = local.port
+    port     = local.master_secrets.port
     schemas  = var.schema_names
   })
 }

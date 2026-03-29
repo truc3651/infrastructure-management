@@ -18,6 +18,10 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
+variable "public_subnet_ids" {
+  type        = list(string)
+}
+
 variable "allowed_security_group_ids" {
   type        = list(string)
 }
@@ -83,5 +87,9 @@ variable "preferred_backup_window" {
 }
 
 variable "preferred_maintenance_window" {
+  type        = string
+}
+
+variable "idle_in_transaction_session_timeout" {
   type        = string
 }

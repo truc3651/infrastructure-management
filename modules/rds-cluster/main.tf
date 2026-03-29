@@ -40,6 +40,14 @@ resource "aws_security_group" "rds" {
     cidr_blocks = var.allowed_cidr_blocks
   }
 
+  ingress {
+    description = "Allow public access (auth via username/password + TLS)"
+    from_port   = local.port
+    to_port     = local.port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     description = "Allow all outbound traffic"
     from_port   = 0
@@ -59,9 +67,9 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_db_subnet_group" "this" {
-  name        = "${var.cluster_name}-postgres-${var.environment}"
+  name        = "${var.cluster_name}-postgres-public-${var.environment}"
   description = "Subnet group for Aurora PostgreSQL"
-  subnet_ids  = var.private_subnet_ids
+  subnet_ids  = var.public_subnet_ids
 
   tags = {
     Name = "${var.cluster_name}-postgres-subnet-group-${var.environment}"
@@ -89,6 +97,13 @@ resource "aws_rds_cluster_parameter_group" "this" {
   parameter {
     name  = "log_min_duration_statement"
     value = "1000"
+  }
+
+  # Kill transactions that sit idle (e.g. app opened a BEGIN but never COMMIT/ROLLBACK)
+  # after the configured duration. Prevents long-running locks from blocking other queries.
+  parameter {
+    name  = "idle_in_transaction_session_timeout"
+    value = var.idle_in_transaction_session_timeout
   }
 
   # Enable logical replication for Debezium CDC
@@ -186,6 +201,8 @@ resource "aws_rds_cluster_instance" "this" {
   performance_insights_enabled          = var.performance_insights_enabled
   performance_insights_kms_key_id       = var.performance_insights_enabled ? aws_kms_key.rds.arn : null
   performance_insights_retention_period = var.performance_insights_enabled ? var.performance_insights_retention_period : null
+
+  publicly_accessible = true
 
   auto_minor_version_upgrade = var.auto_minor_version_upgrade
   apply_immediately          = var.apply_immediately

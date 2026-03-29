@@ -1,8 +1,8 @@
 module "users_database" {
-  source = "../rds-database"
+  source = "./rds-database"
 
   environment      = var.environment
-  application_name = "backend-users-management"
+  application_name = "backend-users"
   database_name    = "users_prod"
   schema_names     = ["public", "users"]
 

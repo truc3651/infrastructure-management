@@ -59,7 +59,7 @@ resource "aws_eip" "nat" {
 
 # Using just 1 NAT gateway instead of 1 per AZ to save costs
 resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat[0].id
+  allocation_id = aws_eip.nat.id
   subnet_id     = values(aws_subnet.public)[0].id
 
   tags = {
@@ -94,7 +94,7 @@ resource "aws_route_table" "private" {
 
   route {
     cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[0].id
+    nat_gateway_id = aws_nat_gateway.main.id
   }
 
   tags = {

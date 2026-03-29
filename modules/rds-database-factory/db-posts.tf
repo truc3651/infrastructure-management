@@ -1,13 +1,13 @@
-module "posts_database" {
-  source = "../rds-database"
+# module "posts_database" {
+#   source = "./rds-database"
 
-  environment      = var.environment
-  application_name = "backend-posts-management"
-  database_name    = "posts_prod"
-  schema_names     = ["public", "posts"]
+#   environment      = var.environment
+#   application_name = "backend-posts"
+#   database_name    = "posts_prod"
+#   schema_names     = ["public", "posts"]
 
-  cluster_endpoint               = var.cluster_endpoint
-  reader_endpoint                = var.reader_endpoint
-  master_credentials_secret_arn  = var.master_credentials_secret_arn
-  kms_key_arn                    = var.kms_key_arn
-}
+#   cluster_endpoint               = var.cluster_endpoint
+#   reader_endpoint                = var.reader_endpoint
+#   master_credentials_secret_arn  = var.master_credentials_secret_arn
+#   kms_key_arn                    = var.kms_key_arn
+# }

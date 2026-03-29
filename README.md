@@ -12,3 +12,7 @@ make get-role-arn
 ```
 make destroy-backend
 ```
+
+## Reason choose Terragrunt
+- Centralize backend remote state, provider and common used env
+- Graph dependencies instead of managing them in CI/CD pipeline

@@ -5,12 +5,12 @@ on:
     inputs:
       environment:
         description: 'Environment to destroy'
-        required: true
         type: choice
         options:
           - dev
           - staging
           - prod
+        default: prod
       component:
         description: 'Component to destroy (or "all" for everything)'
         required: false
@@ -51,5 +51,6 @@ jobs:
             terragrunt run-all destroy --terragrunt-non-interactive
           else
             cd ${{ github.event.inputs.component }}
+            terragrunt init
             terragrunt destroy -auto-approve
           fi

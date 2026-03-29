@@ -1,18 +1,19 @@
 # Migration role: Can modify schema structure (DDL) and data (DML)
-resource "random_password" "migration" {
-  length           = 32
-  special          = true
-  override_special = "!#$%^&*()-_=+[]{}|:,.<>?"
+resource "random_password" "migrationn" {
+  length  = 10
+  special = false
+  numeric = true
+  upper   = true
+  lower   = true
 }
 
 resource "postgresql_role" "migration" {
   name     = local.migration_username
   login    = true
-  password = random_password.migration.result
+  password = random_password.migrationn.result
 
   create_database = false
   create_role     = false
-  superuser       = false
   replication     = false
 
   depends_on = [postgresql_database.this]
@@ -32,7 +33,7 @@ resource "postgresql_grant" "schema_migration" {
   role        = postgresql_role.migration.name
   schema      = each.value
   object_type = "schema"
-  privileges  = ["CREATE", "USAGE", "DROP"]
+  privileges  = ["CREATE", "USAGE"]
 
   depends_on = [
     postgresql_schema.this,
@@ -47,7 +48,7 @@ resource "postgresql_grant" "tables_migration" {
   role        = postgresql_role.migration.name
   schema      = each.value
   object_type = "table"
-  privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "DROP"]
+  privileges  = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
 
   depends_on = [postgresql_grant.schema_migration]
 }
@@ -59,7 +60,7 @@ resource "postgresql_grant" "sequences_migration" {
   role        = postgresql_role.migration.name
   schema      = each.value
   object_type = "sequence"
-  privileges  = ["USAGE", "SELECT", "UPDATE", "CREATE", "DROP"]
+  privileges  = ["USAGE", "SELECT", "UPDATE"]
 
   depends_on = [postgresql_grant.schema_migration]
 }

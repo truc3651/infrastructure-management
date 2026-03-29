@@ -1,5 +1,5 @@
 variable "service_list" {
   description = "Backend service list"
-  type        = list(any)
+  type        = set(string)
   default     = []
 }
