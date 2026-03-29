@@ -3,12 +3,16 @@ name: Terraform Apply
 on:
   push:
     branches: [ master ]
+    paths:
+      - 'environments/**'
+      - 'modules/**'
+      - '*.hcl'
 
   workflow_dispatch:
     inputs:
       environment:
         description: 'Environment to deploy'
-        required: true
+        default: 'prod'
         type: choice
         options:
           - dev
@@ -16,7 +20,6 @@ on:
           - prod
       component:
         description: 'Component to deploy (or "all")'
-        required: true
         default: 'all'
 
 env:
@@ -26,62 +29,65 @@ env:
   AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
 
 jobs:
-  determine-deployments:
+  determine-scope:
     runs-on: ubuntu-latest
     outputs:
-      deployments: ${{ steps.set-deployments.outputs.deployments }}
+      environment: ${{ steps.scope.outputs.environment }}
+      component: ${{ steps.scope.outputs.component }}
+      changes_detected: ${{ steps.scope.outputs.changes_detected }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine what to deploy
-        id: set-deployments
+      - name: Determine deploy scope
+        id: scope
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             ENV="${{ github.event.inputs.environment }}"
             COMPONENT="${{ github.event.inputs.component }}"
 
-            if [ "$COMPONENT" == "all" ]; then
-              DEPLOYMENTS=$(echo '[
-                {"env": "'$ENV'", "component": "vpc"},
-                {"env": "'$ENV'", "component": "eks-cluster"},
-                {"env": "'$ENV'", "component": "rds-cluster"},
-                {"env": "'$ENV'", "component": "rds-database-factory"},
-                {"env": "'$ENV'", "component": "eks-addons"},
-                {"env": "'$ENV'", "component": "kafka-cluster"},
-                {"env": "'$ENV'", "component": "debezium"},
-                {"env": "'$ENV'", "component": "ecr"}
-              ]' | jq -c)
-            else
-              DEPLOYMENTS='[{"env": "'$ENV'", "component": "'$COMPONENT'"}]'
-            fi
-          else
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- environments/)
+            echo "environment=$ENV" >> $GITHUB_OUTPUT
+            echo "component=$COMPONENT" >> $GITHUB_OUTPUT
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
 
-            DEPLOYMENTS=$(echo "$CHANGED_FILES" | \
-              grep -oP 'environments/\K([^/]+)/([^/]+)' | \
-              awk -F'/' '{print "{\"env\": \""$1"\", \"component\": \""$2"\"}"}' | \
-              jq -s -c 'unique')
+          else
+            # Guard against zero-SHA on force push or first push
+            if [ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]; then
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- environments/)
+            else
+              CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- environments/)
+            fi
+
+            # Extract unique environments that changed
+            ENVS=$(echo "$CHANGED_FILES" | grep -oP 'environments/\K[^/]+' | sort -u)
+            ENV_COUNT=$(echo "$ENVS" | grep -c . || true)
+
+            if [ "$ENV_COUNT" -eq 0 ]; then
+              echo "changes_detected=false" >> $GITHUB_OUTPUT
+              echo "No environment changes detected"
+              exit 0
+            fi
+
+            # Let terragrunt resolve which components changed and their ordering
+            # If changes span multiple environments, we still apply per-env
+            FIRST_ENV=$(echo "$ENVS" | head -1)
+            echo "environment=$FIRST_ENV" >> $GITHUB_OUTPUT
+            echo "component=all" >> $GITHUB_OUTPUT
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
           fi
 
-          echo "deployments=$DEPLOYMENTS" >> $GITHUB_OUTPUT
-          echo "Will deploy: $DEPLOYMENTS"
-
   apply:
-    needs: determine-deployments
+    needs: determine-scope
+    if: needs.determine-scope.outputs.changes_detected == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        deployment: ${{ fromJson(needs.determine-deployments.outputs.deployments) }}
-      max-parallel: 1  # Deploy one at a time to respect dependencies
 
     environment:
-      name: ${{ matrix.deployment.env }}
+      name: ${{ needs.determine-scope.outputs.environment }}
 
     permissions:
       contents: read
-      id-token: write # Generate OIDC token for AWS authentication
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -92,12 +98,18 @@ jobs:
           terraform-version: ${{ env.TERRAFORM_VERSION }}
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
           aws-region: ${{ env.AWS_REGION }}
-          aws-role: ${{ env.AWS_ROLE_ARN }} # Tell the setup action to assume GitHubActionsRole
-
-      - name: Terragrunt Init
-        working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}
-        run: terragrunt init
+          aws-role: ${{ env.AWS_ROLE_ARN }}
 
       - name: Terragrunt Apply
-        working-directory: environments/${{ matrix.deployment.env }}/${{ matrix.deployment.component }}
-        run: terragrunt apply -auto-approve
+        run: |
+          ENV="${{ needs.determine-scope.outputs.environment }}"
+          COMPONENT="${{ needs.determine-scope.outputs.component }}"
+
+          if [ "$COMPONENT" == "all" ]; then
+            cd "environments/$ENV"
+            terragrunt run-all apply --terragrunt-non-interactive
+          else
+            cd "environments/$ENV/$COMPONENT"
+            terragrunt init
+            terragrunt apply -auto-approve
+          fi

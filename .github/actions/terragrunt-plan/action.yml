@@ -1,10 +1,14 @@
 name: 'Terragrunt Plan'
-description: 'Run terragrunt init, validate, and plan'
+description: 'Run terragrunt init, validate, and plan with PR comment output'
 
 inputs:
   working-directory:
     description: 'Working directory'
     required: true
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: false
+    default: ''
 
 runs:
   using: "composite"
@@ -23,4 +27,44 @@ runs:
       id: plan
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: terragrunt plan
+      run: |
+        set +e
+        PLAN_OUTPUT=$(terragrunt plan -no-color 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+        echo "$PLAN_OUTPUT" > /tmp/plan_output.txt
+
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "$PLAN_OUTPUT"
+          exit $EXIT_CODE
+        fi
+
+    - name: Post Plan to PR
+      if: github.event_name == 'pull_request' && inputs.github-token != ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        PLAN_OUTPUT=$(cat /tmp/plan_output.txt)
+        COMPONENT="${{ inputs.working-directory }}"
+
+        # Truncate if too long for a GitHub comment (max 65536 chars)
+        if [ ${#PLAN_OUTPUT} -gt 60000 ]; then
+          PLAN_OUTPUT="${PLAN_OUTPUT:0:60000}
+        fi
+
+        COMMENT="#### 📋 Plan: \`$COMPONENT\`
+
+        <details><summary>Show plan output</summary>
+
+        \`\`\`
+        $PLAN_OUTPUT
+        \`\`\`
+
+        </details>
+
+        *Triggered by @${{ github.actor }} in commit ${{ github.sha }}*"
+
+        gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
